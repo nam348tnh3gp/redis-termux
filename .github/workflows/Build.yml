@@ -1,0 +1,48 @@
+name: Build Redis CLI for Termux
+
+on:
+  workflow_dispatch: # Cho phép kích hoạt thủ công
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Termux build environment
+      uses: termux/termux-packages@master
+      with:
+        # Chỉ định gói redis để build
+        packages: redis
+
+    - name: Apply pthread_cancel patch
+      run: |
+        # Tải bản vá chính thức từ termux-packages để sửa lỗi pthread_cancel
+        curl -L -o patches/pthread_cancel.patch https://raw.githubusercontent.com/termux/termux-packages/master/packages/redis/pthread_cancel.patch
+        # Áp dụng bản vá vào mã nguồn Redis
+        cd $GITHUB_WORKSPACE/termux-packages/packages/redis
+        patch -p1 < $GITHUB_WORKSPACE/patches/pthread_cancel.patch
+
+    - name: Modify build.sh to enable TLS
+      run: |
+        cd $GITHUB_WORKSPACE/termux-packages/packages/redis
+        # Thêm BUILD_TLS=yes vào bước make
+        sed -i 's/make -C src -j "\$TERMUX_PKG_MAKE_PROCESSES"/make -C src -j "\$TERMUX_PKG_MAKE_PROCESSES" BUILD_TLS=yes/' build.sh
+        # Thêm openssl vào danh sách phụ thuộc
+        sed -i 's/TERMUX_PKG_DEPENDS="libandroid-execinfo, libandroid-glob"/TERMUX_PKG_DEPENDS="libandroid-execinfo, libandroid-glob, openssl"/' build.sh
+
+    - name: Build package
+      run: |
+        # Build gói redis với các thay đổi đã áp dụng
+        ./build-package.sh -I redis
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: redis-termux-aarch64
+        # Đường dẫn đến gói .deb được tạo ra
+        path: output/*.deb 
