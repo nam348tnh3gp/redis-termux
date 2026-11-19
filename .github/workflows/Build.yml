@@ -1,7 +1,7 @@
 name: Build Redis CLI for Termux (with TLS)
 
 on:
-  workflow_dispatch: # Cho phép kích hoạt thủ công
+  workflow_dispatch:
   push:
     branches: [ main ]
 
@@ -11,26 +11,26 @@ jobs:
 
     steps:
       - name: Clone termux-packages
-        run: |
-          git clone https://github.com/termux/termux-packages.git
-          cd termux-packages
+        run: git clone --depth 1 https://github.com/termux/termux-packages.git
 
       - name: Enable TLS in redis build.sh
+        working-directory: termux-packages/packages/redis
         run: |
-          cd termux-packages/packages/redis
-          # Thêm BUILD_TLS=yes vào lệnh make
-          sed -i 's/make -C src -j "\$TERMUX_PKG_MAKE_PROCESSES"/make -C src -j "\$TERMUX_PKG_MAKE_PROCESSES" BUILD_TLS=yes/' build.sh
-          # Thêm openssl vào danh sách phụ thuộc (nếu chưa có)
-          if ! grep -q 'openssl' build.sh; then
-            sed -i 's/TERMUX_PKG_DEPENDS="\(.*\)"/TERMUX_PKG_DEPENDS="\1, openssl"/' build.sh
+          # Kiểm tra xem đã có TLS chưa
+          if ! grep -q "BUILD_TLS" build.sh; then
+            sed -i 's/make -C src -j "\$TERMUX_PKG_MAKE_PROCESSES"/make -C src -j "\$TERMUX_PKG_MAKE_PROCESSES" BUILD_TLS=yes/' build.sh
           fi
-          cat build.sh # In ra để kiểm tra
+          # Đảm bảo openssl có trong phụ thuộc
+          if ! grep -q 'openssl' build.sh; then
+            sed -i 's/TERMUX_PKG_DEPENDS="\([^"]*\)"/TERMUX_PKG_DEPENDS="\1, openssl"/' build.sh
+          fi
+          echo "=== build.sh after modification ==="
+          cat build.sh
 
-      - name: Build redis package
+      - name: Build redis via Docker
+        working-directory: termux-packages
         run: |
-          cd termux-packages
-          ./scripts/setup-termux.sh
-          ./build-package.sh -I redis
+          ./scripts/run-docker.sh ./build-package.sh -a aarch64 -I redis
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
