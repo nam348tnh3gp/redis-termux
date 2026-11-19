@@ -16,11 +16,9 @@ jobs:
       - name: Enable TLS in redis build.sh
         working-directory: termux-packages/packages/redis
         run: |
-          # Kiểm tra xem đã có TLS chưa
           if ! grep -q "BUILD_TLS" build.sh; then
             sed -i 's/make -C src -j "\$TERMUX_PKG_MAKE_PROCESSES"/make -C src -j "\$TERMUX_PKG_MAKE_PROCESSES" BUILD_TLS=yes/' build.sh
           fi
-          # Đảm bảo openssl có trong phụ thuộc
           if ! grep -q 'openssl' build.sh; then
             sed -i 's/TERMUX_PKG_DEPENDS="\([^"]*\)"/TERMUX_PKG_DEPENDS="\1, openssl"/' build.sh
           fi
@@ -31,6 +29,17 @@ jobs:
         working-directory: termux-packages
         run: |
           ./scripts/run-docker.sh ./build-package.sh -a aarch64 -I redis
+
+      # ⬇️ BƯỚC MỚI: đổi tên để loại bỏ dấu ':'
+      - name: Sanitize .deb filenames
+        run: |
+          cd termux-packages/output
+          for f in *.deb; do
+            newname=$(echo "$f" | tr ':' '_')
+            [ "$f" != "$newname" ] && mv "$f" "$newname"
+          done
+          echo "=== Files in output ==="
+          ls -la
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
